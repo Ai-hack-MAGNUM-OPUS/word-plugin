@@ -1,40 +1,100 @@
 import * as React from "react";
-import { DefaultButton } from "@fluentui/react";
+import { DefaultButton, ProgressIndicator } from "@fluentui/react";
+import { load_docx } from "../../api/load_docx_text";
+import { IEUID, IEData } from "../../api/interfaces";
+import { update_state } from "../../api/update_state";
+import ClipLoader from "react-spinners/ClipLoader";
 
 /* global Word, require */
 
 
+const processFunction = (context: Word.RequestContext, search_text: string, comment_text: string) => {
+    //if (search_text.includes("\u")) return undefined;
+    search_text.replace("\u0005", "")
+    console.log(search_text)
+    if (search_text.length > 10){
+        return context.document.body.search(
+            search_text.slice(0, 255).split("\\").join(""),
+            {
+                ignorePunct: true,
+                ignoreSpace: true
+            }
+        ).getFirst().insertComment(comment_text);
+    }
+    return undefined
+}
+
+
 const App: React.FC = () => {
 
-    const [process, onProcessed] = React.useState(false);
+    const [comments, setComments] = React.useState<Word.Comment[]>([]);
+    const [uid, setUid] = React.useState("");
+    const [response_data, setResponseData] = React.useState<IEData>();
 
+    React.useEffect(() => {
+        if (uid.length) {
+            setTimeout(async () => {
+                const data: IEData = await update_state(uid);
+                console.log(data)
+                setResponseData(data);
+            }, 2000)
+            setUid("");
+        }
+        if (response_data != undefined) {
+            Word.run(async (context) => {
+                var comments = []
+                const response_data_keys = Object.keys(response_data)
+                for (var i = 0; i < response_data_keys.length; ++i) {
+                    for (var j = 0; j < response_data[response_data_keys[i]].length; ++j) {
+                        var comm = processFunction(context, response_data[response_data_keys[i]][j][0], response_data_keys[i]);
+                        if (comm != undefined){
+                            comments.push();
+                        }
+                    }
+                }
+                setComments(comments)
+                setResponseData(undefined)
+                //
+            })
+            setResponseData(undefined);
+        }
+    })
     return (
         <div style={{
             'display': 'flex',
             'justifyContent': 'center',
-            'alignContent': 'center'
+            'alignContent': 'center',
+            'flexDirection': 'column'
         }}>
             <DefaultButton
-                onClick={() => {
-                    Word.run(function(context) {
-                        // Insert your code here. For example:
-                        var documentBody = context.document.body;
-                        context.load(documentBody);
-                        return context.sync()
-                        .then(function(){
-                            console.log(documentBody.text);
-                        })
-                    });
-                    Word.run(async (context) => {
-                        Office.context.document.getFileAsync(Office.FileType.Compressed, (file) => {
-                            console.log(file.value);
-                        })
-                        context.document.body.search("2-кратного размера").getFirst().insertComment("fuck you")
-                    })
-                }}
-            >
-                Проверить на ошибки
-            </DefaultButton>
+                    onClick={() => {
+                        Word.run(function(context) {
+                            // Insert your code here. For example:
+                            var documentBody = context.document.body;
+                            context.load(documentBody);
+                            return context.sync()
+                            .then( async () => {
+                                const data: IEUID = await load_docx(documentBody.text);
+                                console.log(data);
+                                setUid(data.uuid);
+                            })
+                        });
+                    }}
+                >
+                    Проверить на ошибки
+                </DefaultButton>
+                <div style={{
+                    'display': 'flex',
+                    'justifyContent': 'center',
+                    'alignItems': 'center',
+                    'marginTop': 100
+                }}>
+                {
+                    response_data === undefined && uid.length ?
+                    <ClipLoader></ClipLoader> : <div></div>
+                }
+                </div>
+
         </div>
     );
 }
